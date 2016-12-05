@@ -1,0 +1,9 @@
+// 
+// English Language File for LTI Plugin
+//
+ 
+<!-- language file start -->
+exit#:#LTI Sitzung beenden
+exited_title#:#LTI Sitzung beendet
+exited#:#Sie haben die LTI Sitzung beendet
+forbidden#:#Unerlaubter Zugriff
