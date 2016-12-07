@@ -3,11 +3,10 @@
 /* Copyright (c) 1998-2010 ILIAS open source, Extended GPL, see docs/LICENSE */
 
 include_once("./Services/UIComponent/classes/class.ilUIHookPluginGUI.php");
-include_once("./Services/Init/classes/class.ilStartUpGUI.php");
 include_once("class.ilLTIPlugin.php");
 
 /**
- * User interface hook class
+ * User interface hook class for LTI
  * 
  * @author Stefan Schneider <schneider@hrz.uni-marburg.de>
  * @version $Id$
@@ -15,53 +14,47 @@ include_once("class.ilLTIPlugin.php");
  */
 class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	
-	private static $_modifyGUI = 0;
-	private $regLocator = '';
+	/**
+	 * If no lti_user_image exists in SESSION object then display default user image
+	 */ 
+	const DEFAULT_USER_IMAGE = './templates/default/images/no_photo_xxsmall.jpg';
 	
-	// lti params
-	private $contextId = '';
-	private $contextType = '';
-	//private $cssUrl = 'https://www.simple.org:9443/ilias_lti/lti_custom.css';
-	private $cssUrl = '';
-	//private $returnUrl = 'http://ipxe.org';
-	private $returnUrl = '';
-	private $usrFirstname = '';
-	private $usrLastname = '';
-	private $usrFullname = '';
-	private $usrImage = './templates/default/images/no_photo_xxsmall.jpg';
-	private $launchLocale = 'en-US';
+	/**
+	 * 
+	 */ 
+	private static $_ltiMode = false;
 	
-	function __construct() {
-		// get lti session flag and fetch lti config params		
-		if ($_SESSION['lti_context_id']) {
-			$this->contextId = $_SESSION['lti_context_id'];
-			$this->contextType = $_SESSION['lti_context_type'];
-			$this->cssUrl = $_SESSION['lti_launch_css_url'];
-			$this->returnUrl = $_SESSION['lti_launch_presentation_return_url'];
-			$this->usrFirstname = $_SESSION['lti_lis_person_name_given'];
-			$this->usrLastname = $_SESSION['lti_lis_person_name_family'];
-			$this->usrFullname = $_SESSION['lti_lis_person_name_full'];
-			// 
-			$this->launchLocale = $_SESSION['lti_launch_presentation_locale'];
-			// print("hallole".$this->contextId);
-			// return true;
-		}
-		if ($_SESSION['lti_user_image']) $this->usrImage = $_SESSION['lti_user_image'];
-		
-	}
-	function detectLti() { 
-		global $ilUser;
-		$cmd = $_GET["lti_cmd"];
-		switch ($cmd) {
-			case 'exit' :
-				$this->exitLti();
-				break;
-		}
-		if ($this->contextId != "") {
+	/**
+	 * $_SESSION['lti_context_id'] is the main switch for ltiMode!
+	 * We can discuss if this is a good thing
+	 * 
+	 * @return bool
+	 */
+	function getLtiMode() {
+		if (isset($_SESSION['lti_context_id'])) {
 			return true;
-		} else {
+		}
+		else {
 			return false;
 		}
+	}
+	
+	/**
+	 * Don't modify anything in a anonymous or root (id 6) ilias session
+	 * 
+	 * @return bool
+	 */ 
+	function getLtiSkip() {
+		global $DIC;
+		if (!is_object($DIC->user())) {
+			return true;
+		}
+		$usr_id = $DIC->user()->getId();
+		
+		if (!$usr_id || $usr_id == ANONYMOUS_USER_ID || $usr_id == 6) {
+			return true;
+		}
+		return false;
 	}
 	
 	//https://www.simple.org:9443/ilias_lti/ilias.php?ref_id=71&cmd=exit&cmdClass=illtiuihookgui&cmdNode=y6
@@ -78,49 +71,58 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 *
 	 * @return array array with entries "mode" => modification mode, "html" => your html
 	 */
-	function getHTML($a_comp, $a_part, $a_par = array()) {				
-		global $ilUser, $rbacreview, $tpl, $ilLog, $ilCtrl;
-		
-		if (!self::$_modifyGUI ) {
+	function getHTML($a_comp, $a_part, $a_par = array()) {	
+		global $DIC;			
+		if (!self::$_ltiMode) {
 			return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");
 		}
-		
 		if ($a_part == "template_load" && $a_par["tpl_id"] == "tpl.main.html") {
+			$DIC->logger()->root()->write("catch main");
+			
 			$pl = $this->getPluginObject();
 			$tplLtiCss = $pl->getTemplate('tpl.lti_css.html');
+			
 			$ltiCss = file_get_contents($pl->getStyleSheetLocation('lti.css'));
+			//$this->log->write($ltiCss);
 			$tplLtiCss->setVariable('LTI_CSS', $ltiCss);
-			if ($this->cssUrl) {
+			
+			if (isset($_SESSION['lti_launch_css_url'])) {
 				try {
-					$customCss = file_get_contents($this->cssUrl);
+					$customCss = file_get_contents($_SESSION['lti_launch_css_url']);
 					$tplLtiCss->setVariable('CUSTOM_CSS', $customCss);
 				}
 				catch (Exception $e) {
-					$this->showError($e);
+					$this->showError($e); // ToDo
 				}
- 			} 
+ 			}
+ 			 
 			$html = $tplLtiCss->get();
-			//return array("mode" => ilUIHookPluginGUI::PREPEND, "html" => "<style type=\"text/css\">body { visibility:hidden }</style>");
 			return array("mode" => ilUIHookPluginGUI::APPEND, "html" => $html);
+			
+			//return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");
 		}
 		 
 		// hook into tpl.main_menu.html (content is hidden via lti.css) and append a new lti menu
 		if ($a_part == "template_load" && $a_par["tpl_id"] == "Services/MainMenu/tpl.main_menu.html") {
+			$DIC->logger()->root()->write("catch main menu");
 			$pl = $this->getPluginObject();
+			$tpl = $DIC->ui()->mainTemplate();
 			$tpl->addCss($pl->getStyleSheetLocation('lti.css'));
 			$tplLtiMenu = $pl->getTemplate('tpl.lti_menu.html');
-			$tplLtiMenu->setVariable('SRC_USER_IMAGE',$this->usrImage);
-			$tplLtiMenu->setVariable('TXT_USER_FULLNAME',$this->usrFullname);
+			$userImage = (isset($_SESSION['lti_user_image'])) ? $_SESSION['lti_user_image'] : self::DEFAULT_USER_IMAGE;
+			$tplLtiMenu->setVariable('SRC_USER_IMAGE', $userImage);
+			$tplLtiMenu->setVariable('TXT_USER_FULLNAME',$_SESSION['lti_lis_person_name_full']);
 			$tplLtiMenu->setVariable('TXT_EXIT_LTI',$pl->txt("exit")); // ToDo: Language Vars 
 			$html = $tplLtiMenu->get();
 			return array("mode" => ilUIHookPluginGUI::APPEND, "html" => $html);
 		}
 		
 		if ($a_comp == "Services/Locator" && $a_part == "main_locator") {	
-			$locator = $this->processLocator($a_par['locator_gui']);		
+			$locator = $this->processLocator($a_par['locator_gui']);
+			//return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");		
 		}
 		
-		if ($a_comp == "Services/PersonalDesktop" && $a_part == "left_column") {			
+		if ($a_comp == "Services/PersonalDesktop") { // ToDo		
 			return array("mode" => ilUIHookPluginGUI::REPLACE, "html" => "");
 		}
 		return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");
@@ -128,40 +130,51 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	
 	/**
 	 * Modify GUI objects, before they generate ouput
-	 * 
+	 *
 	 * @param string $a_comp component
 	 * @param string $a_part string that identifies the part of the UI that is handled
 	 * @param string $a_par array of parameters (depend on $a_comp and $a_part)
 	 */
 	function modifyGUI($a_comp, $a_part, $a_par = array()) {
-		global $ilUser, $rbacreview, $ilAuth, $ilLog, $tpl;
-		if ($a_comp == "Services/Init" && $a_part == "init_style") {			
-			//$styleDefinition = $a_par["styleDefinition"];
-			$pl = $this->getPluginObject();
-			$usr_id = $ilUser->getId();
-			// don't modify anything in a public or admin ilias session
-			if (!$usr_id || $usr_id == ANONYMOUS_USER_ID || $usr_id == 6) {
-				//$this->setUserGUI($styleDefinition);
-				return;
+		global $DIC;
+		if ($a_comp == "Services/Init" && $a_part == "init_style") {
+			// fake session: remove!
+			if (isset($_GET['target']) && $_GET['target'] == 'crs_71') {
+				$params = explode('_',$_GET['target']);
+				if (count($params) == 2) {
+					$this->fakeLtiSession($params[1],$params[0]);
+				}	
 			}
-			self::$_modifyGUI = $this->detectLti();
+			
+			//ToDo: look at auth_mode=lti not only if lti SESSION value is set
+			if (!$this->getLtiMode() || $this->getLtiSkip()) {
+				self::$_ltiMode = false;
+			}
+			else {
+				self::$_ltiMode = true;
+			}
+			if (self::$_ltiMode) {
+				$this->checkCmd();
+				$this->checkRefId($_GET['ref_id']);
+			}
 		}
 	}
 	
 	/**
-	 * Set Locator entries LTI Object as root
+	 * Set Locator entries LTI object as root
 	 *
-	 * @param ilLocatorGUI Object $locatorGUI
+	 * @param ilLocatorGUI object $locatorGUI
 	 *
 	 */
 	function processLocator($locatorGUI) {
+		global $DIC;
 		$pl = $this->getPluginObject();
 		$srcEntries = $locatorGUI->getItems();
 		$locatorGUI->clearItems();
 		
 		$foundEntry = false;
 		foreach($srcEntries as $srcEntry) {
-			if ($srcEntry['ref_id'] == $this->contextId) {//$_SESSION['lti_context_id']) {
+			if ($srcEntry['ref_id'] == $_SESSION['lti_context_id']) {
 				$foundEntry = true;
 			}
 			if ($foundEntry) {
@@ -178,14 +191,20 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 				continue;
 			}
 		}
-		if (!$foundEntry) { //Ups! where ARE you??
+		/* something really strange happens here:
+		$DIC->logger()->root()->write("found entry final:" . ($foundEntry === false));
+		if ($foundEntry === false) { //Ups! where ARE you??
 			print($pl->txt('forbidden'));
 		}
+		*/  
 	}
 	
+	/**
+	 * exit LTI session and if defined redirecting to returnUrl
+	 */
 	function exitLti() {
-		if ($this->returnUrl == '') {
-			//$tpl->addBlockfile('CONTENT', 'content', $pl->getDirectory() . "/templates/tpl.lti_exit.html");
+		global $DIC;
+		if ($this->getSessionValue('lti_launch_presentation_return_url') == '') {
 			$pl = $this->getPluginObject();
 			$tplExit = $pl->getTemplate('tpl.lti_exit.html');
 			$tplExit->setVariable('STYLE_EXITED',$pl->getStyleSheetLocation('lti.css'));
@@ -198,23 +217,105 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 		}
 		else {
 			$this->logout();
-			header('Location: ' . $this->returnUrl);
+			header('Location: ' . $_SESSION['lti_launch_presentation_return_url']);
 			exit;
 		}		
 	}
 	
+	/**
+	 * 
+	 */
+	function checkCmd() {
+		$cmd = $_GET["lti_cmd"];
+		switch ($cmd) {
+			case 'exit' :
+				$this->exitLti();
+				break;
+		}
+	} 
+	
+	/**
+	 *
+	 */
+	function checkRefId($ref_id) {
+		global $DIC;
+		
+		$pl = $this->getPluginObject();
+		if (!$ref_id) {
+			return;
+		}
+		if ($_SESSION['lti_context_id'] == $ref_id) {
+			return;
+		}
+		$childOfContext = $DIC['tree']->isGrandChild($_SESSION['lti_context_id'],$ref_id);
+		if (!$childOfContext) {
+			print($pl->txt('forbidden'));
+			exit;
+		}
+	}   
+	
+	/**
+	 * logout ILIAS and destroys Session and ilClientId cookie
+	 */
 	function logout() {
+		global $DIC;
 		ilSession::setClosingContext(ilSession::SESSION_CLOSE_USER);		
-		$GLOBALS['DIC']['ilAuthSession']->logout();
+		$DIC['ilAuthSession']->logout();
 		// reset cookie
 		$client_id = $_COOKIE["ilClientId"];
 		ilUtil::setCookie("ilClientId","");
 	}
 	
+	/**
+	 * 
+	 */ 
+	function gotoHook() {
+		if (isset($_GET['target']) && $_GET['target'] == $_SESSION['lti_context_type'] ."_". $_SESSION['lti_context_id']) {
+			return;
+		}
+		$params = explode('_',$_GET['target']);
+		if (count($params) == 2) {
+			$this->checkRefId($params[1]);
+		}
+	}
+	
+	/**
+	 * 
+	 */ 
 	function showError($e) { // ToDo
 		$this->logout();
 		print $e;
 		exit;
+	}
+	
+	/**
+	 * fake LTI Session
+	 */ 
+	function fakeLtiSession($ref_id,$type) {
+		global $DIC;
+		$DIC->logger()->root()->write("fakeLtiSession");
+		$_SESSION['lti_context_id'] = $ref_id;
+		$_SESSION['lti_context_type'] = $type;
+		$_SESSION['lti_launch_css_url'];
+		$_SESSION['lti_launch_presentation_return_url'] = 'http://ipxe.org';
+		$_SESSION['lti_lis_person_name_given'] = "Fritz";
+		$_SESSION['lti_lis_person_name_family'] = "Fratze";
+		$_SESSION['lti_lis_person_name_full'] = "Fritz Fratze";
+	}
+	
+	/**
+	 * get session value != ''
+	 * 
+	 * @param $sess_key string 
+	 * @return string
+	 */ 
+	function getSessionValue($sess_key) {
+		if (isset($_SESSION[$sess_key]) && $_SESSION[$sess_key] != '') {
+			return $_SESSION[$sess_key];
+		}
+		else {
+			return '';
+		}
 	}
 }
 ?>
