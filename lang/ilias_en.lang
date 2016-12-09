@@ -6,4 +6,4 @@
 exit#:#Exit LTI Session
 exited_title#:#LTI Sitzung finished
 exited#:#You finished the LTI Session
-forbidden#:#Forbidden Access
+forbidden#:#You have no permission to access the item.

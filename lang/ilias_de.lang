@@ -6,4 +6,4 @@
 exit#:#LTI Sitzung beenden
 exited_title#:#LTI Sitzung beendet
 exited#:#Sie haben die LTI Sitzung beendet
-forbidden#:#Unerlaubter Zugriff
+forbidden#:#Sie haben keine Berechtigung, auf das Objekt zuzugreifen.
