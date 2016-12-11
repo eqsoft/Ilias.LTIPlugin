@@ -27,10 +27,16 @@ footer {
 }
 
 /* hide TreeView */
-.ilTreeView {
+
+a.ilTreeView {
 	display: none;
 }
 
+/*
+#ilSideBarIcon {
+	display: none;
+}
+*/
 /* hide ActionMenu */
 .ilHeadAction {
 	display: none;

@@ -44,6 +44,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 		}
 		// ToDo: check auth_mode instead of user login
 		//if (isset($_SESSION['lti_context_id']) && $user->auth_mode == "??") {
+		//if (isset($_SESSION['lti_context_id']) && $DIC->user()->getLogin() == 'ltilearner') {
 		if (isset($_SESSION['lti_context_id'])) {
 			return true;
 		}
@@ -67,15 +68,20 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	function getHTML($a_comp, $a_part, $a_par = array()) {	
 		global $DIC;			
 		if (!$this->getLtiMode()) {
+			//$DIC->logger()->root()->write("no lti mode");
 			return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");
 		}
-		if ($a_part == "template_load" && $a_par["tpl_id"] == "tpl.main.html") {
-			//$DIC->logger()->root()->write("catch main");
+		/*
+		if ($a_part == "template_load") {
+			$DIC->logger()->root()->write($a_par["tpl_id"]);
+		}
+		*/
+		if ($a_part == "template_load" && ($a_par["tpl_id"] == "tpl.main.html" || $a_par["tpl_id"] == 'Modules/LearningModule/tpl.page_new.html')) {
+			$DIC->logger()->root()->write("catch main or page_new");
+			//$DIC->logger()->root()->write($a_par['html']);
 			$pl = $this->getPluginObject();
-			
 			$tplLtiCss = $pl->getTemplate('tpl.lti_css.html');
 			$ltiCss = file_get_contents($pl->getStyleSheetLocation('lti.css'));
-			//$this->log->write($ltiCss);
 			$tplLtiCss->setVariable('LTI_CSS', $ltiCss);
 			
 			if (isset($_SESSION['lti_launch_css_url'])) {
@@ -84,24 +90,23 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 					$tplLtiCss->setVariable('CUSTOM_CSS', $customCss);
 				}
 				catch (Exception $e) {
-					$this->showError($e); // ToDo
+					//$this->showError($e); // ToDo
 				}
  			}
- 			 
-			$html = $tplLtiCss->get();
-			return array("mode" => ilUIHookPluginGUI::APPEND, "html" => $html);
-			
-			//return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");
+			$cssHtml = $tplLtiCss->get();
+			//$hideHtml = "<body></body>"
+			//$html = preg_replace('/\<body.*?\>',$cssHtml.'</body>',$a_par['html']);
+			$html = str_replace('</body>',$cssHtml.'</body>',$a_par['html']);
+			return array("mode" => ilUIHookPluginGUI::REPLACE, "html" => $html);
 		}
 		 
 		// hook into tpl.main_menu.html (content is hidden via lti.css) and append a new lti menu
 		if ($a_part == "template_load" && $a_par["tpl_id"] == "Services/MainMenu/tpl.main_menu.html") {
-			//$DIC->logger()->root()->write("catch main menu");
 			$this->checkMessages();
 			$pl = $this->getPluginObject();
-			$tpl = $DIC->ui()->mainTemplate();
-			$tpl->addCss($pl->getStyleSheetLocation('lti.css'));
 			$tplLtiMenu = $pl->getTemplate('tpl.lti_menu.html');
+			$hideCss = file_get_contents($pl->getStyleSheetLocation('hide.css'));
+			$tplLtiMenu->setVariable('HIDE_CSS', $hideCss);
 			$userImage = (isset($_SESSION['lti_user_image'])) ? $_SESSION['lti_user_image'] : self::DEFAULT_USER_IMAGE;
 			$tplLtiMenu->setVariable('SRC_USER_IMAGE', $userImage);
 			$tplLtiMenu->setVariable('TXT_USER_FULLNAME',$_SESSION['lti_lis_person_name_full']);
@@ -136,13 +141,14 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 		if ($a_comp == "Services/Init" && $a_part == "init_style") {
 			// fake session: remove!
 			$DIC->logger()->root()->write("initStyle");
+			/*
 			if (isset($_GET['target']) && $_GET['target'] == 'crs_71') {
 				$params = explode('_',$_GET['target']);
 				if (count($params) == 2) {
 					$this->fakeLtiSession($params[1],$params[0]);
 				}	
 			}
-			
+			*/
 			//ToDo: look at auth_mode=lti not only if lti SESSION value is set
 			
 			if ($this->getLtiMode()) {
@@ -344,7 +350,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	}
 	
 	/**
-	 * fake LTI Session
+	 * fake LTI Session (remove!)
 	 */ 
 	function fakeLtiSession($ref_id,$type) {
 		global $DIC;
