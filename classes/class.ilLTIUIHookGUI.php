@@ -28,26 +28,6 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	const MSG_SUCCESS = "3";
 	
 	/**
-	 * 
-	 */ 
-	private static $_ltiMode = false;
-	
-	/**
-	 * 
-	 */ 
-	private static $_context_type = '';
-	
-	/**
-	 * 
-	 */ 
-	private static $_context_id = '';
-	
-	/**
-	 * 
-	 */ 
-	private static $_context_url = '';
-	
-	/**
 	 * $_SESSION['lti_context_id'] is the main switch for ltiMode!
 	 * We can discuss if this is a good thing
 	 * 
@@ -55,32 +35,16 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */
 	function getLtiMode() {
 		global $DIC;
-		//$DIC->logger()->root()->write("aut_mode: ".$DIC->user()->auth_mode);
-		if (isset($_SESSION['lti_context_id'])) {
-			self::$_context_id = $_SESSION['lti_context_id'];
-			$ctxType = $this->getSessionValue('lti_context_type');
-			self::$_context_type = ($ctxType == '') ? 'crs' : $ctxType;
-			self::$_context_url = 'goto.php?target='.self::$_context_type.'_'.self::$_context_id;
-			return true;
-		}
-		else {
+		$user = $DIC->user();
+		if (!is_object($user)) {
 			return false;
 		}
-	}
-	
-	/**
-	 * Don't modify anything in a anonymous or root (id 6) ilias session
-	 * 
-	 * @return bool
-	 */ 
-	function getLtiSkip() {
-		global $DIC;
-		if (!is_object($DIC->user())) {
-			return true;
+		if ($user->getId() == 6) { // root?
+			return false;
 		}
-		$usr_id = $DIC->user()->getId();
-		
-		if (!$usr_id || $usr_id == ANONYMOUS_USER_ID || $usr_id == 6) {
+		// ToDo: check auth_mode instead of user login
+		//if (isset($_SESSION['lti_context_id']) && $user->auth_mode == "??") {
+		if (isset($_SESSION['lti_context_id'])) {
 			return true;
 		}
 		return false;
@@ -102,12 +66,13 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */
 	function getHTML($a_comp, $a_part, $a_par = array()) {	
 		global $DIC;			
-		if (!self::$_ltiMode) {
+		if (!$this->getLtiMode()) {
 			return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");
 		}
 		if ($a_part == "template_load" && $a_par["tpl_id"] == "tpl.main.html") {
-			$DIC->logger()->root()->write("catch main");
+			//$DIC->logger()->root()->write("catch main");
 			$pl = $this->getPluginObject();
+			
 			$tplLtiCss = $pl->getTemplate('tpl.lti_css.html');
 			$ltiCss = file_get_contents($pl->getStyleSheetLocation('lti.css'));
 			//$this->log->write($ltiCss);
@@ -131,7 +96,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 		 
 		// hook into tpl.main_menu.html (content is hidden via lti.css) and append a new lti menu
 		if ($a_part == "template_load" && $a_par["tpl_id"] == "Services/MainMenu/tpl.main_menu.html") {
-			$DIC->logger()->root()->write("catch main menu");
+			//$DIC->logger()->root()->write("catch main menu");
 			$this->checkMessages();
 			$pl = $this->getPluginObject();
 			$tpl = $DIC->ui()->mainTemplate();
@@ -143,11 +108,13 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 			$tplLtiMenu->setVariable('TXT_EXIT_LTI',$pl->txt("exit")); // ToDo: Language Vars 
 			$html = $tplLtiMenu->get();
 			return array("mode" => ilUIHookPluginGUI::APPEND, "html" => $html);
+			//return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");
+			 
 		}
 		
 		if ($a_comp == "Services/Locator" && $a_part == "main_locator") {	
 			$locator = $this->processLocator($a_par['locator_gui']);
-			//return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");		
+			return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");		
 		}
 		
 		if ($a_comp == "Services/PersonalDesktop") { // ToDo	
@@ -168,25 +135,17 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 		global $DIC;
 		if ($a_comp == "Services/Init" && $a_part == "init_style") {
 			// fake session: remove!
-			/*
+			$DIC->logger()->root()->write("initStyle");
 			if (isset($_GET['target']) && $_GET['target'] == 'crs_71') {
 				$params = explode('_',$_GET['target']);
 				if (count($params) == 2) {
 					$this->fakeLtiSession($params[1],$params[0]);
 				}	
 			}
-			*/
+			
 			//ToDo: look at auth_mode=lti not only if lti SESSION value is set
 			
-			if (!$this->getLtiMode() || $this->getLtiSkip()) {
-				//$DIC->logger()->root()->write("no lti mode");
-				self::$_ltiMode = false;
-			}
-			else {
-				//$DIC->logger()->root()->write("lti mode");
-				self::$_ltiMode = true;
-			}
-			if (self::$_ltiMode) {
+			if ($this->getLtiMode()) {
 				$this->checkCmd();
 				$this->checkRefId($_GET['ref_id']);
 			}
@@ -199,19 +158,19 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 * @param ilLocatorGUI object $locatorGUI
 	 *
 	 */
-	function processLocator($locatorGUI) {
+	function processLocator($locatorGUI) { // ToDo: Locator for multiple context_ids
 		global $DIC;
 		$pl = $this->getPluginObject();
 		$srcEntries = $locatorGUI->getItems();
 		$locatorGUI->clearItems();
 		
 		$foundEntry = false;
+		$id = $_SESSION['current_context_id'];
 		foreach($srcEntries as $srcEntry) {
-			if ($srcEntry['ref_id'] == $_SESSION['lti_context_id']) {
+			if ($srcEntry['ref_id'] == $id) {
 				$foundEntry = true;
 			}
 			if ($foundEntry) {
-				//print_r($srcEntry);
 				$locatorGUI->addItem(
 					$srcEntry['title'],
 					$srcEntry['link'],
@@ -238,6 +197,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */
 	function exitLti() {
 		global $DIC;
+		$DIC->logger()->root()->write("exitLti");
 		if ($this->getSessionValue('lti_launch_presentation_return_url') == '') {
 			$pl = $this->getPluginObject();
 			$tplExit = $pl->getTemplate('tpl.lti_exit.html');
@@ -253,7 +213,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 			$this->logout();
 			header('Location: ' . $_SESSION['lti_launch_presentation_return_url']);
 			exit;
-		}		
+		}	
 	}
 	
 	/**
@@ -261,6 +221,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */ 
 	function checkMessages() {
 		global $DIC;
+		$DIC->logger()->root()->write("checkMessages");
 		$pl = $this->getPluginObject();
 		$msg = $_GET["lti_msg"];
 		$msg_type = $_GET["lti_msg_type"];
@@ -285,12 +246,13 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */
 	function checkCmd() {
 		global $DIC;
+		$DIC->logger()->root()->write("checkCmd");
 		$cmd = $_GET["lti_cmd"];
 		switch ($cmd) {
 			case 'exit' :
 				$this->exitLti();
 				break;
-		}
+		} 
 	} 
 	
 	/**
@@ -298,18 +260,29 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */
 	function checkRefId($ref_id) {
 		global $DIC;
-		
+		$DIC->logger()->root()->write("checkRefId: " . $ref_id);
 		$pl = $this->getPluginObject();
 		if (!$ref_id) {
 			return;
 		}
-		if ($_SESSION['lti_context_id'] == $ref_id) {
-			return;
+		$ids = $this->getContextIds();
+		foreach($ids as $id) {
+			if ($ref_id == $id) { // special case if another allowed context ref_id is called in a request 
+				$_SESSION['current_context_id'] = $ref_id;
+				$_SESSION['current_context_type'] = $this->getObjType($ref_id);
+				$_SESSION['current_context_url'] = 'goto.php?target='.$_SESSION['current_context_type'].'_'.$ref_id;
+				return;
+			}
 		}
-		$childOfContext = $DIC['tree']->isGrandChild($_SESSION['lti_context_id'],$ref_id);
-		if (!$childOfContext) {
+		$foundEntry = false;
+		foreach($ids as $id) {
+			$childOfContext = $DIC['tree']->isGrandChild($id,$ref_id);
+			if ($childOfContext) {
+				$foundEntry = true;
+			}
+		}
+		if (!$foundEntry) {
 			$this->redirectToContext(self::MSG_ERROR,'forbidden');
-			exit;
 		}
 	}   
 	
@@ -318,6 +291,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */
 	function logout() {
 		global $DIC;
+		$DIC->logger()->root()->write("logout");
 		ilSession::setClosingContext(ilSession::SESSION_CLOSE_USER);		
 		$DIC['ilAuthSession']->logout();
 		// reset cookie
@@ -329,24 +303,44 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 * 
 	 */ 
 	function gotoHook() {
-		if (!self::$_ltiMode) {
+		global $DIC;
+		$DIC->logger()->root()->write("gotoHook");
+		if (!$this->getLtiMode()) {
 			return;
 		}
-		if (isset($_GET['target']) && $_GET['target'] == $_SESSION['lti_context_type'] ."_". $_SESSION['lti_context_id']) {
+		if (!isset($_GET['target'])) { // cannot proceed
 			return;
 		}
 		$params = explode('_',$_GET['target']);
-		if (count($params) == 2) {
-			$this->checkRefId($params[1]);
+		if (count($params) != 2) { // cannot proceed
+			return;
 		}
+		$obj_type =  $params[0];
+		$ref_id = $params[1];
+		$contextIds = $this->getContextIds();
+		foreach ($contextIds as $ctxId) { // important point of entry!!
+			if ($ctxId == $ref_id) { // set context_id, don't check ref_id
+				$_SESSION['current_context_id'] = $ref_id;
+				$_SESSION['current_context_type'] = $obj_type;
+				$_SESSION['current_context_url'] = 'goto.php?target='.$obj_type.'_'.$ref_id;
+				//$DIC->logger()->root()->write("set current_context_id: " . $_SESSION['current_context_id']);
+				//$DIC->logger()->root()->write("set current_context_type: " . $_SESSION['current_context_type']);
+				//$DIC->logger()->root()->write("set current_context_url: " . $_SESSION['current_context_url']);
+				return;
+			}
+		}
+		// for all other goto targets check ref_id
+		$this->checkRefId($ref_id);
 	}
 	
 	/**
 	 * 
 	 */ 
 	function redirectToContext($_msg_type=self::MSG_INFO, $_msg='') {
+		global $DIC;
+		$DIC->logger()->root()->write("redirectToContext");
 		$msg = ($_msg != '') ? '&lti_msg='.$_msg.'&lti_msg_type='.$_msg_type : '';
-		ilUtil::redirect(self::$_context_url.$msg);
+		ilUtil::redirect($_SESSION['current_context_url'].$msg);
 	}
 	
 	/**
@@ -355,10 +349,10 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	function fakeLtiSession($ref_id,$type) {
 		global $DIC;
 		$DIC->logger()->root()->write("fakeLtiSession");
-		$_SESSION['lti_context_id'] = $ref_id;
+		$_SESSION['lti_context_id'] = $ref_id . "," . "76";
 		$_SESSION['lti_context_type'] = $type;
 		$_SESSION['lti_launch_css_url'];
-		$_SESSION['lti_launch_presentation_return_url'] = 'http://ipxe.org';
+		//$_SESSION['lti_launch_presentation_return_url'] = 'http://ipxe.org';
 		$_SESSION['lti_lis_person_name_given'] = "Fritz";
 		$_SESSION['lti_lis_person_name_family'] = "Fratze";
 		$_SESSION['lti_lis_person_name_full'] = "Fritz Fratze";
@@ -377,6 +371,22 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 		else {
 			return '';
 		}
+	}
+	
+	/**
+	 * 
+	 */
+	function getContextIds() {
+		return explode(",",$_SESSION['lti_context_id']);
+	}
+	
+	/**
+	 * 
+	 */ 
+	function getObjType($ref_id) { // is there another way to get obj_type from ref_id?
+		include_once './Services/Object/classes/class.ilObjectFactory.php';
+		$objFactory = new ilObjectFactory();
+		return $objFactory->getTypeByRefId($ref_id);
 	}
 }
 ?>
