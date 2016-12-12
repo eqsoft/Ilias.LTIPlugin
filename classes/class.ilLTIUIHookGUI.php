@@ -68,22 +68,17 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	function getHTML($a_comp, $a_part, $a_par = array()) {	
 		global $DIC;			
 		if (!$this->getLtiMode()) {
-			//$DIC->logger()->root()->write("no lti mode");
 			return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");
 		}
-		/*
-		if ($a_part == "template_load") {
-			$DIC->logger()->root()->write($a_par["tpl_id"]);
-		}
-		*/
+		
 		if ($a_part == "template_load" && ($a_par["tpl_id"] == "tpl.main.html" || $a_par["tpl_id"] == 'Modules/LearningModule/tpl.page_new.html')) {
-			$DIC->logger()->root()->write("catch main or page_new");
+			//$DIC->logger()->root()->write("catch main or page_new");
 			//$DIC->logger()->root()->write($a_par['html']);
 			$pl = $this->getPluginObject();
 			$tplLtiCss = $pl->getTemplate('tpl.lti_css.html');
 			$ltiCss = file_get_contents($pl->getStyleSheetLocation('lti.css'));
 			$tplLtiCss->setVariable('LTI_CSS', $ltiCss);
-			
+			$a_par['tpl_obj']->addCss($pl->getStyleSheetLocation('hide.css'));
 			if (isset($_SESSION['lti_launch_css_url'])) {
 				try {
 					$customCss = file_get_contents($_SESSION['lti_launch_css_url']);
@@ -105,8 +100,6 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 			$this->checkMessages();
 			$pl = $this->getPluginObject();
 			$tplLtiMenu = $pl->getTemplate('tpl.lti_menu.html');
-			$hideCss = file_get_contents($pl->getStyleSheetLocation('hide.css'));
-			$tplLtiMenu->setVariable('HIDE_CSS', $hideCss);
 			$userImage = (isset($_SESSION['lti_user_image'])) ? $_SESSION['lti_user_image'] : self::DEFAULT_USER_IMAGE;
 			$tplLtiMenu->setVariable('SRC_USER_IMAGE', $userImage);
 			$tplLtiMenu->setVariable('TXT_USER_FULLNAME',$_SESSION['lti_lis_person_name_full']);
@@ -123,8 +116,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 		}
 		
 		if ($a_comp == "Services/PersonalDesktop") { // ToDo	
-			$this->redirectToContext(self::MSG_INFO,'forbidden');	
-			//return array("mode" => ilUIHookPluginGUI::REPLACE, "html" => "");
+			$this->redirectToContext(self::MSG_ERROR,'forbidden');	
 		}
 		return array("mode" => ilUIHookPluginGUI::KEEP, "html" => "");
 	}
@@ -140,7 +132,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 		global $DIC;
 		if ($a_comp == "Services/Init" && $a_part == "init_style") {
 			// fake session: remove!
-			$DIC->logger()->root()->write("initStyle");
+			//$DIC->logger()->root()->write("initStyle");
 			/*
 			if (isset($_GET['target']) && $_GET['target'] == 'crs_71') {
 				$params = explode('_',$_GET['target']);
@@ -203,7 +195,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */
 	function exitLti() {
 		global $DIC;
-		$DIC->logger()->root()->write("exitLti");
+		//$DIC->logger()->root()->write("exitLti");
 		if ($this->getSessionValue('lti_launch_presentation_return_url') == '') {
 			$pl = $this->getPluginObject();
 			$tplExit = $pl->getTemplate('tpl.lti_exit.html');
@@ -227,7 +219,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */ 
 	function checkMessages() {
 		global $DIC;
-		$DIC->logger()->root()->write("checkMessages");
+		//$DIC->logger()->root()->write("checkMessages");
 		$pl = $this->getPluginObject();
 		$msg = $_GET["lti_msg"];
 		$msg_type = $_GET["lti_msg_type"];
@@ -252,7 +244,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */
 	function checkCmd() {
 		global $DIC;
-		$DIC->logger()->root()->write("checkCmd");
+		//$DIC->logger()->root()->write("checkCmd");
 		$cmd = $_GET["lti_cmd"];
 		switch ($cmd) {
 			case 'exit' :
@@ -266,7 +258,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */
 	function checkRefId($ref_id) {
 		global $DIC;
-		$DIC->logger()->root()->write("checkRefId: " . $ref_id);
+		//$DIC->logger()->root()->write("checkRefId: " . $ref_id);
 		$pl = $this->getPluginObject();
 		if (!$ref_id) {
 			return;
@@ -297,7 +289,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */
 	function logout() {
 		global $DIC;
-		$DIC->logger()->root()->write("logout");
+		//$DIC->logger()->root()->write("logout");
 		ilSession::setClosingContext(ilSession::SESSION_CLOSE_USER);		
 		$DIC['ilAuthSession']->logout();
 		// reset cookie
@@ -310,7 +302,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */ 
 	function gotoHook() {
 		global $DIC;
-		$DIC->logger()->root()->write("gotoHook");
+		//$DIC->logger()->root()->write("gotoHook");
 		if (!$this->getLtiMode()) {
 			return;
 		}
@@ -344,7 +336,7 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */ 
 	function redirectToContext($_msg_type=self::MSG_INFO, $_msg='') {
 		global $DIC;
-		$DIC->logger()->root()->write("redirectToContext");
+		//$DIC->logger()->root()->write("redirectToContext");
 		$msg = ($_msg != '') ? '&lti_msg='.$_msg.'&lti_msg_type='.$_msg_type : '';
 		ilUtil::redirect($_SESSION['current_context_url'].$msg);
 	}
@@ -354,11 +346,11 @@ class ilLTIUIHookGUI extends ilUIHookPluginGUI {
 	 */ 
 	function fakeLtiSession($ref_id,$type) {
 		global $DIC;
-		$DIC->logger()->root()->write("fakeLtiSession");
+		//$DIC->logger()->root()->write("fakeLtiSession");
 		$_SESSION['lti_context_id'] = $ref_id . "," . "76";
 		$_SESSION['lti_context_type'] = $type;
 		$_SESSION['lti_launch_css_url'];
-		//$_SESSION['lti_launch_presentation_return_url'] = 'http://ipxe.org';
+		$_SESSION['lti_launch_presentation_return_url'] = 'http://ipxe.org';
 		$_SESSION['lti_lis_person_name_given'] = "Fritz";
 		$_SESSION['lti_lis_person_name_family'] = "Fratze";
 		$_SESSION['lti_lis_person_name_full'] = "Fritz Fratze";
